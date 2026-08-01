@@ -1,5 +1,7 @@
 # b4m-necromancer - revive your old scanner with Raspberry Pi ZERO 2
 
+[![CI](https://github.com/b4m-oss/necromancer/actions/workflows/ci.yml/badge.svg)](https://github.com/b4m-oss/necromancer/actions/workflows/ci.yml)
+
 [日本語版](./README_ja.md)
 
 This system is a small solution to automate document scanning from a numeric keypad.  
@@ -39,17 +41,32 @@ As a result, SANE was discovered, and the idea came up to drive the scanner from
 
 ### Automatic installation
 
-In the following steps, we assume that the repository is cloned to `~/b4m-necromancer`.
+On a Raspberry Pi, clone the repo and run the root installer (delegates to `app/install.sh`).
 
-1. Clone the repository on your Raspberry Pi.
-2. Change into the `app` directory and run the install script.
+**Recommended** (after the `v0.3.0` release tag exists):
 
 ```bash
-git clone https://github.com/b4m-oss/b4m-necromancer.git ~/b4m-necromancer
-cd ~/b4m-necromancer/app
-chmod +x install.sh
-./install.sh
+git clone --branch v0.3.0 https://github.com/b4m-oss/necromancer.git ~/necromancer
+cd ~/necromancer && ./install.sh
 ```
+
+Until the tag is published, use a development branch instead:
+
+```bash
+git clone --branch dev-v0.3.0 https://github.com/b4m-oss/necromancer.git ~/necromancer
+# or: --branch main
+cd ~/necromancer && ./install.sh
+```
+
+You can also run `make install-pi` from the repository root (same as `./install.sh`).
+
+**Optional** (from a cloned repository root; prefers the tagged script):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/b4m-oss/necromancer/v0.3.0/install.sh | bash
+```
+
+After install, copy `~/app/config/upload.example.json` → `~/app/config/upload.json` and edit credentials (do not commit secrets). See [Setup and configuration](./docs/en/setup_config.md).
 
 ### Manual installation
 
