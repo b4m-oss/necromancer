@@ -124,6 +124,38 @@ delete_after_upload: False
 - 実際の `{timestamp}` には実行時のタイムスタンプが入ります。
 - **注意:** `--dump-config` は設定を計算して表示するだけで、スキャンやアップロードは行いません（ドライに確認できます）。
 
+## ローカル開発（ホスト / Docker）
+
+依存関係はルートの `pyproject.toml` に定義しています（`requires-python >=3.11`）。  
+Raspberry Pi 向けインストールは従来どおり `app/install.sh` が `app/requirements.txt` を使います（ランタイムのピンは `pyproject.toml` と同期）。
+
+### ホスト（Python 3.11）
+
+```bash
+make install-dev   # .venv を作成し pip install -e ".[dev]"
+make test
+make test-cov
+```
+
+macOS では `evdev` はスキップされます（Linux 向けマーカー）。テストは既存の fake/mock を使います。
+
+### Docker（Python 3.11 固定）
+
+```bash
+make docker-build
+make docker-test
+```
+
+Compose / `docker run` の例:
+
+```bash
+docker compose build
+docker compose run --rm dev
+docker run --rm -v "$PWD":/workspace -w /workspace b4m-necromancer-dev:3.11   sh -c "pip install -q -e '.[dev]' && pytest -q"
+```
+
+詳細は [開発者ガイド](./docs/dev/_developers_guide.md) を参照してください。
+
 ## サポート
 
 **おことわり**
