@@ -1,5 +1,7 @@
 # b4m-necromancer - revive your old scanner with Raspberry Pi ZERO 2
 
+[![CI](https://github.com/b4m-oss/necromancer/actions/workflows/ci.yml/badge.svg)](https://github.com/b4m-oss/necromancer/actions/workflows/ci.yml)
+
 [English](./README.md)
 
 このシステムは、テンキーパッドからの入力によってドキュメントスキャンを自動実行するためのソリューションです。
