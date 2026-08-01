@@ -1,3 +1,5 @@
-evdev
-Pillow
-
+# Runtime Python deps for Raspberry Pi install (install.sh).
+# Keep in sync with [project].dependencies in the repo-root pyproject.toml.
+# install.sh copies only app/ to $HOME/app, so this file remains the Pi path.
+evdev>=1.6.0,<2
+Pillow>=10.0.0,<12
