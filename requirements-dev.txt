@@ -1,6 +1,0 @@
-# Fallback / reference for host development without editable install.
-# Preferred path (Makefile): pip install -e ".[dev]" from the repo root.
-# Align versions with [project.optional-dependencies].dev and Pillow in pyproject.toml.
-Pillow>=10.0.0,<12
-pytest>=8.0.0,<9
-pytest-cov>=5.0.0,<7

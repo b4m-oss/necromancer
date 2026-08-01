@@ -27,8 +27,9 @@
 ## Local development (pyproject + Docker)
 
 - Python **3.11** (see `.python-version`).
-- Root `pyproject.toml` is the source of truth for runtime and `dev` extras.
-- Pi deploy path: `app/install.sh` still installs from `app/requirements.txt` into `$HOME/app/venv` (pins mirrored from `pyproject.toml`).
+- Root `pyproject.toml` is the source of truth for runtime and `dev` extras (`pip install -e ".[dev]"`).
+- Pi deploy path: root `./install.sh` → `scripts/install.sh` → `app/install.sh`, which installs from `app/requirements.txt` into `$HOME/app/venv` (pins mirrored from `pyproject.toml`).
+- Docker assets live under `docker/` (`Dockerfile`, `docker-compose.yml`).
 
 ### Host
 
@@ -45,6 +46,9 @@ make test-cov
 ```bash
 make docker-build
 make docker-test
+# equivalent:
+# docker compose -f docker/docker-compose.yml build
+# docker compose -f docker/docker-compose.yml run --rm dev
 ```
 
 The image is `python:3.11-slim-bookworm` with an editable install. It is for unit tests only (no SANE/USB / Pi runtime).

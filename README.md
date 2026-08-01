@@ -147,7 +147,7 @@ delete_after_upload: False
 
 ## Local development (host / Docker)
 
-Dependencies are declared in root `pyproject.toml` (`requires-python >=3.11`).  
+Dependencies are declared in root `pyproject.toml` (`requires-python >=3.11`, including the `dev` extra for pytest).  
 Raspberry Pi install still uses `app/requirements.txt` via `app/install.sh` (kept in sync with the runtime pins in `pyproject.toml`).
 
 ### Host (Python 3.11)
@@ -162,6 +162,8 @@ On macOS, `evdev` is skipped (Linux marker); tests use the existing fake/mock pa
 
 ### Docker (Python 3.11 fixed)
 
+Dev image and Compose files live under `docker/`.
+
 ```bash
 make docker-build
 make docker-test
@@ -170,8 +172,8 @@ make docker-test
 Or with Compose / `docker run`:
 
 ```bash
-docker compose build
-docker compose run --rm dev
+docker compose -f docker/docker-compose.yml build
+docker compose -f docker/docker-compose.yml run --rm dev
 # equivalent image run after build:
 docker run --rm -v "$PWD":/workspace -w /workspace b4m-necromancer-dev:3.11 \
   sh -c "pip install -q -e '.[dev]' && pytest -q"

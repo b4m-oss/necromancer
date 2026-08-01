@@ -4,6 +4,7 @@ VENV ?= .venv
 VENV_BIN := $(VENV)/bin
 PYTEST := $(VENV_BIN)/pytest
 DOCKER_COMPOSE ?= docker compose
+DOCKER_COMPOSE_FILE ?= docker/docker-compose.yml
 
 .PHONY: help venv install-dev install-pi test test-cov coverage-html docker-build docker-test clean
 
@@ -50,10 +51,10 @@ coverage-html: $(PYTEST)
 	@echo "HTML report: htmlcov/index.html"
 
 docker-build:
-	$(DOCKER_COMPOSE) build
+	$(DOCKER_COMPOSE) -f $(DOCKER_COMPOSE_FILE) build
 
 docker-test: docker-build
-	$(DOCKER_COMPOSE) run --rm dev \
+	$(DOCKER_COMPOSE) -f $(DOCKER_COMPOSE_FILE) run --rm dev \
 		sh -c "pip install -q -e '.[dev]' && pytest -q --cov=app.lib --cov-report=term-missing --cov-config=.coveragerc"
 
 $(PYTEST):
