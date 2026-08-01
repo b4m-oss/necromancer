@@ -128,6 +128,40 @@ delete_after_upload: False
 - At runtime, `{timestamp}` is replaced with the actual timestamp used for the scan.
 - **Note:** `--dump-config` is read-only: it does not perform any scan or upload; it just shows what would happen.
 
+## Local development (host / Docker)
+
+Dependencies are declared in root `pyproject.toml` (`requires-python >=3.11`).  
+Raspberry Pi install still uses `app/requirements.txt` via `app/install.sh` (kept in sync with the runtime pins in `pyproject.toml`).
+
+### Host (Python 3.11)
+
+```bash
+make install-dev   # creates .venv and runs: pip install -e ".[dev]"
+make test
+make test-cov
+```
+
+On macOS, `evdev` is skipped (Linux marker); tests use the existing fake/mock pattern.
+
+### Docker (Python 3.11 fixed)
+
+```bash
+make docker-build
+make docker-test
+```
+
+Or with Compose / `docker run`:
+
+```bash
+docker compose build
+docker compose run --rm dev
+# equivalent image run after build:
+docker run --rm -v "$PWD":/workspace -w /workspace b4m-necromancer-dev:3.11 \
+  sh -c "pip install -q -e '.[dev]' && pytest -q"
+```
+
+See also [Developers' guide](./docs/dev/_developers_guide.md).
+
 ## Troubleshooting
 
 See [Troubleshooting](./docs/en/troubleshoot.md)  

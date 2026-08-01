@@ -20,6 +20,10 @@ htmlcov/
 .pytest_cache/
 coverage.xml
 
+# Packaging / editable installs
+*.egg-info/
+build/
+dist/
 
 # Virtual environments (patterns for safety)
 venv/

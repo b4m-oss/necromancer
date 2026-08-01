@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "b4m-necromancer"
+version = "0.2.0"
+description = "Revive your old scanner with Raspberry Pi Zero 2"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Kohki SHIKATA / B4M LLC" },
+]
+dependencies = [
+    # Linux-only (Pi / Docker). Host macOS installs skip this via the marker.
+    "evdev>=1.6.0,<2; sys_platform == 'linux'",
+    "Pillow>=10.0.0,<12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0,<9",
+    "pytest-cov>=5.0.0,<7",
+]
+
+[project.urls]
+Homepage = "https://github.com/b4m-oss/necromancer"
+Issues = "https://github.com/b4m-oss/necromancer/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["config/*.json", "config/*.example.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
