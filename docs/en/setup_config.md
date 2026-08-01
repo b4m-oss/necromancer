@@ -7,13 +7,19 @@ Scanner model and device name are configured via `~/app/config/scanner.json`.
 ```json
 {
   "device_name": "fujitsu:ScanSnap iX500:17872",
+  "vendor_keyword": "fujitsu",
+  "model_keyword": "ix500",
   "backend": "fujitsu",
   "default_source": "ADF Duplex",
   "test_timeout_sec": 10
 }
 ```
 
-- **device_name**: SANE device name shown by `scanimage -L`. Change this if you use a different scanner.
+- **device_name**: SANE device name shown by `scanimage -L`. Change this when you switch to a different scanner.
+- **vendor_keyword**: Lowercased vendor keyword used when auto-detecting a scanner from `scanimage -L` output.  
+  Examples: `fujitsu`, `brother`, `epson`, etc.
+- **model_keyword**: Lowercased model keyword used together with `vendor_keyword` for auto-detection.  
+  Examples: `ix500`, `fi-7160`, `dcp-c1210n`, etc.
 - **backend**: SANE backend name (currently for informational purposes only).
 - **default_source**: Default source used when `mode.json` has no `source` field.
 - **test_timeout_sec**: Timeout (seconds) for the scanner self-test (`scanimage --device=... -n`).
@@ -49,6 +55,18 @@ Bus 001 Device 004: ID 04c5:132b FUJITSU LIMITED ScanSnap iX500
 ```
 
 This only confirms that the scanner is physically attached; the actual value you write into `scanner.json` should come from `scanimage -L`.
+
+3. Example settings for `vendor_keyword` / `model_keyword`
+
+- For iX500:  
+  - `vendor_keyword`: `fujitsu`  
+  - `model_keyword`: `ix500`
+- For a network scanner like Brother DCP-C1210N:  
+  - `vendor_keyword`: `brother`  
+  - `model_keyword`: `dcp-c1210n`
+
+These keywords are matched against both the device name and the description in `scanimage -L` output.  
+When you replace the physical scanner, update `device_name` plus these two keywords so that the auto-detection logic can keep working.
 
 
 ## Scan modes (`mode.json`)

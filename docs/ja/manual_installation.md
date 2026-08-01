@@ -5,7 +5,6 @@
 ```bash
 sudo apt-get update
 sudo apt-get install -y python3-pip python3-evdev sane-utils
-pip3 install evdev pillow
 ```
 
 2. ログディレクトリを作成します
@@ -24,7 +23,15 @@ cp -r ~/b4m-necromancer/app/* ~/app/
 mkdir -p ~/app/tmp
 ```
 
-4. systemdサービスをセットアップします
+4. Python 仮想環境を作成し、依存パッケージをインストールします
+
+```bash
+python3 -m venv ~/app/venv
+~/app/venv/bin/pip install --upgrade pip
+~/app/venv/bin/pip install -r ~/app/requirements.txt
+```
+
+5. systemdサービスをセットアップします
 
 ```bash
 sudo cp ~/b4m-necromancer/app/scanner_service.service /etc/systemd/system/
@@ -33,18 +40,18 @@ sudo cp ~/b4m-necromancer/app/scanner_service.service /etc/systemd/system/
 sudo sed -i "s/User=kohki/User=$USER/g" /etc/systemd/system/scanner_service.service
 sudo sed -i "s/Group=kohki/Group=$USER/g" /etc/systemd/system/scanner_service.service
 sudo sed -i "s|WorkingDirectory=/home/kohki/app|WorkingDirectory=/home/$USER/app|g" /etc/systemd/system/scanner_service.service
-sudo sed -i "s|ExecStart=/home/kohki/myscan/bin/python3 /home/kohki/app/keypad_daemon.py|ExecStart=/usr/bin/python3 /home/$USER/app/keypad_daemon.py|g" /etc/systemd/system/scanner_service.service
+sudo sed -i "s|ExecStart=/home/kohki/myscan/bin/python3 /home/kohki/app/keypad_daemon.py|ExecStart=/home/$USER/app/venv/bin/python /home/$USER/app/keypad_daemon.py|g" /etc/systemd/system/scanner_service.service
 sudo sed -i '/^Environment="PYTHONPATH=/d' /etc/systemd/system/scanner_service.service
 ```
 
-5. 実行権限を設定します
+6. 実行権限を設定します
 
 ```bash
 chmod +x ~/b4m-necromancer/app/keypad_daemon.py
 chmod +x ~/b4m-necromancer/app/lib/scan.py
 ```
 
-6. サービスを有効化して開始します
+7. サービスを有効化して開始します
 
 ```bash
 sudo systemctl daemon-reload

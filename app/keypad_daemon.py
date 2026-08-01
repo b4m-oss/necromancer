@@ -248,16 +248,20 @@ class KeypadDaemon:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             logging.info(f"====== [{timestamp}] Starting scan in '{mode}' mode ======")
             
-            # Run the scanner script as a subprocess
+            # Run scanner as a module so package-relative imports in lib/ work
             try:
-                scan_cmd = [sys.executable, SCANNER_SCRIPT, mode]
-                
-                # Start scan process
+                scan_cmd = [sys.executable, "-m", "lib.scan", mode]
+                scan_env = os.environ.copy()
+                # Belt-and-suspenders: ensure app root is on sys.path under systemd / odd cwd
+                scan_env["PYTHONPATH"] = str(APP_DIR)
+
                 process = subprocess.Popen(
-                    scan_cmd, 
-                    stdout=subprocess.PIPE, 
+                    scan_cmd,
+                    cwd=str(APP_DIR),
+                    env=scan_env,
+                    stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    text=True
+                    text=True,
                 )
                 
                 # Stream output in real time
@@ -304,7 +308,7 @@ class KeypadDaemon:
         logging.info("Keypad monitoring stopped")
 
 
-def main():
+def main():  # pragma: no cover
     """Main entry point."""
     # Parse CLI arguments
     import argparse
@@ -342,5 +346,5 @@ def main():
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     sys.exit(main()) 

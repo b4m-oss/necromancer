@@ -7,6 +7,8 @@
 ```json
 {
   "device_name": "fujitsu:ScanSnap iX500:17872",
+  "vendor_keyword": "fujitsu",
+  "model_keyword": "ix500",
   "backend": "fujitsu",
   "default_source": "ADF Duplex",
   "test_timeout_sec": 10
@@ -14,6 +16,10 @@
 ```
 
 - **device_name**: `scanimage -L` で表示される SANE デバイス名。別のスキャナに差し替える場合はここを変更します。
+- **vendor_keyword**: `scanimage -L` の出力からスキャナを自動検出する際に使うベンダー名キーワード（小文字）。  
+  例: `fujitsu`, `brother`, `epson` など。
+- **model_keyword**: 同じく自動検出に使うモデル名キーワード（小文字）。  
+  例: `ix500`, `fi-7160`, `dcp-c1210n` など。
 - **backend**: 使用する SANE バックエンド名（現在は情報用途）。
 - **default_source**: `mode.json` に `source` が無い場合のデフォルトソース。
 - **test_timeout_sec**: スキャナー診断 (`scanimage --device=... -n`) のタイムアウト秒数。
@@ -49,6 +55,18 @@ Bus 001 Device 004: ID 04c5:132b FUJITSU LIMITED ScanSnap iX500
 ```
 
 これは「Pi に物理的に刺さっているか」の確認用で、実際に `scanner.json` に書く値は `scanimage -L` の結果を使います。
+
+3. `vendor_keyword` / `model_keyword` の設定例
+
+- iX500 の場合:  
+  - `vendor_keyword`: `fujitsu`  
+  - `model_keyword`: `ix500`
+- Brother DCP-C1210N のようなネットワークスキャナの場合:  
+  - `vendor_keyword`: `brother`  
+  - `model_keyword`: `dcp-c1210n`
+
+これらのキーワードは、`scanimage -L` の出力中のどこかに含まれていればマッチします。  
+新しいスキャナに差し替えた場合も、`device_name` と合わせてこの 2 つを更新することで、自動検出ロジックが追随します。
 
 
 ## スキャンモードの設定（`mode.json`）

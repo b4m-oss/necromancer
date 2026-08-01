@@ -190,18 +190,19 @@ class KeypadMonitor:
             mode = SCAN_MODES[input_key]
             print(f"\nStarting scan in '{mode}' mode...")
             
-            # Run scan script as a subprocess
+            # Run scanner as a module so package-relative imports in lib/ work
             try:
-                # Keep current working directory
-                current_dir = os.getcwd()
-                scan_cmd = [sys.executable, SCANNER_SCRIPT, mode]
-                
-                # Run scan as a non-blocking subprocess
+                scan_cmd = [sys.executable, "-m", "lib.scan", mode]
+                scan_env = os.environ.copy()
+                scan_env["PYTHONPATH"] = str(APP_DIR)
+
                 process = subprocess.Popen(
-                    scan_cmd, 
-                    stdout=subprocess.PIPE, 
+                    scan_cmd,
+                    cwd=str(APP_DIR),
+                    env=scan_env,
+                    stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    text=True
+                    text=True,
                 )
                 
                 # Stream output in real time
@@ -246,7 +247,7 @@ class KeypadMonitor:
         print("Stopped monitoring keypad")
 
 
-def main():
+def main():  # pragma: no cover
     """Main entry point (interactive keypad scanner)."""
     print("Keypad scanner - startup")
     print(f"Debug mode: {'ON' if DEBUG_MODE else 'OFF'}")
@@ -277,5 +278,5 @@ def main():
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     sys.exit(main()) 

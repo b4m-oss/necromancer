@@ -4,7 +4,7 @@ import time
 import select
 import sys
 
-def main():
+def main():  # pragma: no cover
     """Main program for debugging numeric keypad input."""
     print("=== Keypad Debug Tool ===")
     print("This tool monitors input from a numeric keypad and prints key events.")
@@ -81,5 +81,5 @@ def main():
     
     return 0
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     sys.exit(main()) 

@@ -1,5 +1,7 @@
 {
   "device_name": "fujitsu:ScanSnap iX500:17872",
+  "vendor_keyword": "fujitsu",
+  "model_keyword": "ix500",
   "backend": "fujitsu",
   "default_source": "ADF Duplex",
   "test_timeout_sec": 10

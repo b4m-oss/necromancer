@@ -4,12 +4,26 @@ import subprocess
 import datetime
 import time
 import shutil
+import sys
 from pathlib import Path
 from PIL import Image, ImageStat
 import threading
 
-from upload_adapter import get_uploader_from_config
+try:
+    from .upload_adapter import get_uploader_from_config
+    from .nextcloud import load_nextcloud_config
+    from .upload_adapter import _load_upload_config_raw
+except ImportError:
+    # Deploy as `python -m lib.scan` with only ~/app on path; tolerate odd package resolution.
+    _app_root = Path(__file__).resolve().parent.parent
+    if str(_app_root) not in sys.path:
+        sys.path.insert(0, str(_app_root))
+    from lib.upload_adapter import get_uploader_from_config
+    from lib.nextcloud import load_nextcloud_config
+    from lib.upload_adapter import _load_upload_config_raw
 
+A4_PAGE_WIDTH_MM = 210
+A4_PAGE_HEIGHT_MM = 297
 
 def is_blank_page(image_path, white_threshold=187, white_ratio_threshold=0.995):
     """
@@ -51,6 +65,173 @@ def create_timestamp_dir():
     tmp_dir = Path(__file__).resolve().parent.parent / 'tmp' / timestamp
     os.makedirs(tmp_dir, exist_ok=True)
     return tmp_dir, timestamp
+
+
+def build_batch_scan_command(config_name: str):
+    """
+    Build the batch scan command and related metadata for the given mode.
+    This does not execute any external command and is safe for use in
+    diagnostic utilities such as --dump-config or future self-checks.
+    """
+    configs = load_scan_configs()
+    if config_name not in configs:
+        raise ValueError(f"configuration '{config_name}' is not defined in mode.json")
+
+    cfg = configs[config_name]
+
+    # Scan settings
+    scanner_cfg = load_scanner_config()
+    device_name = scanner_cfg["device_name"]
+    resolution = cfg.get('resolution', 200)
+    mode = cfg.get('mode', 'Color')
+    if isinstance(mode, str) and mode:
+        mode_normalized = mode[0].upper() + mode[1:].lower()
+    else:
+        mode_normalized = "Color"
+
+    source = cfg.get('source', scanner_cfg.get('default_source', 'ADF Duplex'))
+
+    # scanimage batch always uses JPEG as intermediate format
+    img_format = 'jpeg'
+
+    # Output pattern (use a placeholder timestamp so that the pattern
+    # matches the real runtime layout but is deterministic for display)
+    placeholder_ts = "{timestamp}"
+    tmp_base = Path(__file__).resolve().parent.parent / 'tmp' / placeholder_ts
+    output_pattern = str(tmp_base / f"{config_name}-%d.jpg")
+
+    # Extra options from mode.json (keep in sync with batch_scan_with_scanimage)
+    extra_opts = []
+    if cfg.get('swdeskew'):
+        extra_opts.append('--swdeskew=yes')
+    if cfg.get('swcrop'):
+        extra_opts.append('--swcrop=yes')
+    if cfg.get('ald'):
+        extra_opts.append('--ald=yes')
+
+    page_width_mm = cfg.get('page_width_mm')
+    page_height_mm = cfg.get('page_height_mm')
+    max_page_height_mm = cfg.get('max_page_height_mm')
+    if page_width_mm:
+        extra_opts.append(f'--page-width={page_width_mm}')
+    if page_height_mm:
+        extra_opts.append(f'--page-height={page_height_mm}')
+    elif max_page_height_mm:
+        extra_opts.append(f'--page-height={max_page_height_mm}')
+
+    extra_str = ""
+    if extra_opts:
+        extra_str = " " + " ".join(extra_opts)
+
+    batch_cmd = (
+        f'scanimage --device="{device_name}" '
+        f'--resolution={resolution} '
+        f'--mode={mode_normalized} '
+        f'--format={img_format} '
+        f'--source="{source}" '
+        f'--batch={output_pattern} '
+        f'--batch-count=-1 '
+        f'--batch-start=1 '
+        f'--progress'
+        f'{extra_str} '
+    )
+
+    effective_params = {
+        "device_name": device_name,
+        "resolution": resolution,
+        "mode": mode_normalized,
+        "source": source,
+        "format": img_format,
+        "output_pattern": output_pattern,
+        "extra_options": extra_opts,
+    }
+
+    return {
+        "type": "batch",
+        "mode": config_name,
+        "command": batch_cmd,
+        "output_pattern": output_pattern,
+        "effective_params": effective_params,
+    }
+
+
+def build_upload_target_info(config_name: str):
+    """
+    Build information about the upload target for the given mode.
+    Currently assumes Nextcloud as the provider but returns a generic
+    structure so that future providers can be added.
+    """
+    # Mode is validated here to mirror build_batch_scan_command behaviour
+    configs = load_scan_configs()
+    if config_name not in configs:
+        raise ValueError(f"configuration '{config_name}' is not defined in mode.json")
+
+    cfg = configs[config_name]
+    file_format = str(cfg.get("file_format", "")).upper()
+
+    try:
+        nc_cfg = load_nextcloud_config()
+    except Exception:
+        # If upload configuration is not available, still return a
+        # minimal structure so that dump-config can report something.
+        nc_cfg = {}
+
+    provider = "nextcloud"
+    endpoint = nc_cfg.get("endpoint", "<missing-endpoint>")
+    upload_folder = nc_cfg.get("upload_folder", "Scans/")
+    delete_after_upload = nc_cfg.get("delete_after_upload", False)
+
+    # For PDF modes, batch_scan_with_scanimage() creates
+    # {config_name}-{timestamp}.pdf under tmp/ and upload_pdf_to_nextcloud()
+    # sends it as upload_folder + filename. For non-PDF modes, a directory
+    # named by timestamp is uploaded.
+    if file_format == "PDF":
+        remote_path_pattern = f"{upload_folder}{config_name}-" + "{timestamp}.pdf"
+        strategy = "pdf"
+    else:
+        remote_path_pattern = upload_folder + "{timestamp}/"
+        strategy = "directory"
+
+    return {
+        "provider": provider,
+        "mode": config_name,
+        "endpoint": endpoint,
+        "upload_folder": upload_folder,
+        "delete_after_upload": delete_after_upload,
+        "strategy": strategy,
+        "remote_path_pattern": remote_path_pattern,
+    }
+
+
+def dump_config(mode_name: str) -> str:
+    """
+    Build a human-readable dump of the effective scan and upload
+    configuration for the given mode.
+    """
+    batch = build_batch_scan_command(mode_name)
+    upload = build_upload_target_info(mode_name)
+
+    lines = []
+    lines.append(f"Mode: {mode_name}")
+    lines.append("")
+    lines.append("=== scanimage command (batch) ===")
+    lines.append(batch["command"])
+    lines.append("")
+    lines.append("Parameters:")
+    params = batch.get("effective_params", {})
+    for key in sorted(params.keys()):
+        lines.append(f"- {key}: {params[key]}")
+
+    lines.append("")
+    lines.append("=== upload target ===")
+    lines.append(f"provider          : {upload.get('provider')}")
+    lines.append(f"endpoint          : {upload.get('endpoint')}")
+    lines.append(f"upload_folder     : {upload.get('upload_folder')}")
+    lines.append(f"strategy          : {upload.get('strategy')}")
+    lines.append(f"remote_path       : {upload.get('remote_path_pattern')}")
+    lines.append(f"delete_after_upload: {upload.get('delete_after_upload')}")
+
+    return "\n".join(lines)
 
 def convert_images_to_pdf(image_dir, output_pdf):
     """Convert all images in the given directory into a single PDF."""
@@ -127,10 +308,15 @@ def load_scan_configs(config_path: str = str(Path(__file__).resolve().parent.par
 def load_scanner_config(config_path: str = str(Path(__file__).resolve().parent.parent / 'config' / 'scanner.json')):
     """
     Load scanner configuration from scanner.json.
-    If the file is missing or invalid, return iX500 defaults.
+    If the file is missing or invalid, return defaults (iX500 example).
     """
     default_cfg = {
+        # Full SANE device name example. Users should override this to match their environment.
         "device_name": "fujitsu:ScanSnap iX500:17872",
+        # Keywords used when searching scanimage -L output.
+        # These are lowercased and compared against the device name and description.
+        "vendor_keyword": "fujitsu",
+        "model_keyword": "ix500",
         "backend": "fujitsu",
         "default_source": "ADF Duplex",
         "test_timeout_sec": 10,
@@ -219,8 +405,8 @@ def monitor_scan_directory(directory, callback):
         # Get all JPG files currently in the directory
         try:
             current_files = set([f for f in os.listdir(directory) 
-                               if f.lower().endswith('.jpg') and 
-                               os.path.isfile(os.path.join(directory, f))])
+                              if f.lower().endswith('.jpg') and 
+                              os.path.isfile(os.path.join(directory, f))])
         except Exception as e:
             print(f"Directory read error: {e}")
             current_files = set()
@@ -304,7 +490,7 @@ def batch_scan_with_scanimage(config_name: str, upload_to_nextcloud=True):
     
     # Scan settings
     scanner_cfg = load_scanner_config()
-    device_name = scanner_cfg.get("device_name", "fujitsu:ScanSnap iX500:17872")
+    device_name = scanner_cfg["device_name"]
     resolution = cfg.get('resolution', 200)
     mode = cfg.get('mode', 'Color')
     # scanimage is usually case-insensitive, but normalize for clarity
@@ -554,7 +740,7 @@ def single_scan_with_scanimage(output_path: str, config_name: str, upload_to_nex
     
     # Scan settings
     scanner_cfg = load_scanner_config()
-    device_name = scanner_cfg.get("device_name", "fujitsu:ScanSnap iX500:17872")
+    device_name = scanner_cfg["device_name"]
     resolution = cfg.get('resolution', 200)
     mode = cfg.get('mode', 'Color').lower()
     
@@ -651,7 +837,7 @@ def find_scanner():
     sane.init()
     # Search for devices whose model name contains ix500 and usb
     devices = [dev for dev in sane.get_devices() 
-               if 'ix500' in dev[1].lower() and 'usb' in dev[1].lower()]
+              if 'ix500' in dev[1].lower() and 'usb' in dev[1].lower()]
     if devices:
         return devices[0][0]
     return None
@@ -667,7 +853,10 @@ class ScannerManager:
     
     def __init__(self):
         scanner_cfg = load_scanner_config()
-        self.device_name = scanner_cfg.get("device_name", "fujitsu:ScanSnap iX500:17872")
+        self.device_name = scanner_cfg["device_name"]
+        # Store lowercase keywords for detection logic
+        self.vendor_keyword = str(scanner_cfg.get("vendor_keyword", "")).lower()
+        self.model_keyword = str(scanner_cfg.get("model_keyword", "")).lower()
         self.initialized = False
         self.scanner_process = None
         self.available = True
@@ -681,27 +870,58 @@ class ScannerManager:
             list_cmd = "scanimage -L"
             result = subprocess.run(list_cmd, shell=True, capture_output=True, text=True, timeout=15)
             
-            if result.returncode == 0 and self.device_name in result.stdout:
+            stdout = result.stdout or ""
+            stdout_lower = stdout.lower()
+
+            # If the configured device name already appears, treat it as found.
+            if result.returncode == 0 and self.device_name in stdout:
                 print(f"Scanner found: {self.device_name}")
                 return True
-            else:
-                print("Scanner not found. Available scanners:")
-                print(result.stdout)
-                
-                # Try to find a partial match for the device name
-                if "fujitsu" in result.stdout.lower() and "ix500" in result.stdout.lower():
-                    print("Detected ScanSnap iX500; updating device name")
-                    # Update device_name
-                    import re
-                    device_match = re.search(r'(fujitsu:ScanSnap iX500:[^\s`\'\"]+)', result.stdout)
-                    if device_match:
-                        self.device_name = device_match.group(1)
-                        print(f"New device name: {self.device_name}")
-                        return True
-                
-                # Fall back to the configured device name
-                print(f"Falling back to configured device name: {self.device_name}")
-                return True
+
+            print("Scanner not found by exact device_name. Available scanners:")
+            print(stdout)
+
+            # Try to find a device whose name/description contains the configured keywords.
+            # This allows switching to a different scanner by only changing scanner.json.
+            try:
+                import re
+
+                # scanimage -L output typically has lines like:
+                # device `fujitsu:ScanSnap iX500:17872' is a FUJITSU ScanSnap iX500 scanner
+                candidates = []
+                for line in stdout.splitlines():
+                    m = re.search(r"device `([^']+)'", line)
+                    if not m:
+                        continue
+                    dev_name = m.group(1)
+                    line_lower = line.lower()
+                    dev_lower = dev_name.lower()
+                    candidates.append((dev_name, line_lower, dev_lower))
+
+                for dev_name, line_lower, dev_lower in candidates:
+                    # If keywords are configured, require both to match either device name or description.
+                    if self.vendor_keyword and self.model_keyword:
+                        if (self.vendor_keyword in dev_lower or self.vendor_keyword in line_lower) and (
+                            self.model_keyword in dev_lower or self.model_keyword in line_lower
+                        ):
+                            print("Detected scanner by vendor/model keywords; updating device name")
+                            self.device_name = dev_name
+                            print(f"New device name: {self.device_name}")
+                            return True
+
+                # No keyword-based match found. Fall back to the first discovered device, if any.
+                if candidates:
+                    print("No keyword match found; falling back to first discovered device.")
+                    self.device_name = candidates[0][0]
+                    print(f"Fallback device name: {self.device_name}")
+                    return True
+
+            except Exception as e_inner:
+                print(f"Error while parsing scanimage output: {e_inner}")
+
+            # As a last resort, fall back to the configured device name.
+            print(f"Falling back to configured device name: {self.device_name}")
+            return True
         except Exception as e:
             print(f"Error while detecting scanner: {e}")
             print(f"Using configured scanner: {self.device_name}")
@@ -743,34 +963,379 @@ class ScannerManager:
             print("The scanner may be disconnected or busy.")
             return False
 
-if __name__ == "__main__":
+def run_dry_run_check() -> bool:
+    """
+    Run a dry-run connectivity check without performing any real scan
+    or cloud upload. This verifies:
+    - scanner discovery
+    - scanner warm-up / self-test
+    - cloud endpoint connectivity (Nextcloud or future providers)
+    """
+    print("=== Dry-run: environment check ===")
+    scanner = ScannerManager.get_instance()
+
+    print("\n[Scanner detection]")
+    scanner_available = scanner.check_scanner_available()
+    print(f"Scanner available: {scanner_available}")
+
+    print("\n[Scanner warm-up]")
+    warm_up_ok = scanner.warm_up_scanner()
+    print(f"Scanner warm-up: {warm_up_ok}")
+
+    print("\n[Cloud connectivity]")
+    try:
+        try:
+            from .nextcloud import test_nextcloud_connection
+        except ImportError:
+            from lib.nextcloud import test_nextcloud_connection
+
+        cloud_ok = test_nextcloud_connection()
+    except Exception as e:
+        print(f"Cloud connectivity check error: {e}")
+        cloud_ok = False
+    print(f"Cloud connectivity: {cloud_ok}")
+
+    all_ok = scanner_available and warm_up_ok and cloud_ok
+    print("\n[Summary]")
+    print(f"Scanner: {'OK' if scanner_available else 'NG'} / "
+          f"Warm-up: {'OK' if warm_up_ok else 'NG'} / "
+          f"Cloud: {'OK' if cloud_ok else 'NG'}")
+    return all_ok
+
+
+def run_dry_run_single_scan(config_name: str) -> bool:
+    """
+    Run a single-page dry-run scan:
+    - Uses the specified mode for resolution/mode/source
+    - Forces A4 single-sided scan
+    - Saves exactly one page under tmp/DRYRUN-YYYYMMDDHHMMSS/
+    - Does NOT perform any upload or deletion
+    """
+    print(f"=== Dry-run: single test scan (mode={config_name}) ===")
+
+    configs = load_scan_configs()
+    if config_name not in configs:
+        print(f"Error: configuration '{config_name}' is not defined in mode.json")
+        return False
+
+    cfg = configs[config_name]
+    scanner_cfg = load_scanner_config()
+    device_name = scanner_cfg["device_name"]
+    resolution = cfg.get("resolution", 200)
+    mode = cfg.get("mode", "Color")
+    if isinstance(mode, str) and mode:
+        mode = mode[0].upper() + mode[1:].lower()
+    else:
+        mode = "Color"
+    source = cfg.get("source", scanner_cfg.get("default_source", "ADF Duplex"))
+
+    scanner = ScannerManager.get_instance()
+    print("\n[Scanner warm-up]")
+    if not scanner.warm_up_scanner():
+        print("Error: failed to warm up the scanner for dry-run single scan")
+        return False
+
+    # Create dedicated dry-run tmp directory
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    base_tmp = Path(__file__).resolve().parent.parent / "tmp"
+    tmp_dir = base_tmp / f"DRYRUN-{timestamp}"
+    os.makedirs(tmp_dir, exist_ok=True)
+    output_path = tmp_dir / f"{config_name}-dryrun-1.jpg"
+
+    print("\n[Scan command]")
+    cmd_parts = [
+        f'scanimage --device="{device_name}"',
+        f"--resolution={resolution}",
+        f"--mode={mode}",
+        "--format=jpeg",
+        f'--source="{source}"',
+        f"--page-width={A4_PAGE_WIDTH_MM}",
+        f"--page-height={A4_PAGE_HEIGHT_MM}",
+    ]
+
+    # Optional software options, mirroring batch_scan_with_scanimage where reasonable
+    if cfg.get("swdeskew"):
+        cmd_parts.append("--swdeskew=yes")
+    if cfg.get("swcrop"):
+        cmd_parts.append("--swcrop=yes")
+    if cfg.get("ald"):
+        cmd_parts.append("--ald=yes")
+
+    cmd_parts.append(f"-o {output_path}")
+    cmd_str = " ".join(cmd_parts)
+    print(f"Executing command: {cmd_str}")
+
+    try:
+        result = subprocess.run(
+            cmd_str,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.stdout:
+            print("\nscanimage stdout:")
+            print(result.stdout)
+        if result.stderr:
+            print("\nscanimage stderr:")
+            print(result.stderr)
+
+        if result.returncode != 0:
+            print(f"Dry-run scan failed with status {result.returncode}")
+            return False
+    except subprocess.TimeoutExpired:
+        print("Dry-run scan process timed out.")
+        # fall through to file existence check
+    except Exception as e:
+        print(f"Exception during dry-run single scan: {e}")
+        return False
+
+    if not os.path.exists(output_path):
+        print(f"Error: expected output file was not created: {output_path}")
+        return False
+
+    size = os.path.getsize(output_path)
+    if size <= 0:
+        print(f"Error: output file is empty: {output_path}")
+        return False
+
+    print("\n[Result]")
+    print(f"Dry-run scan succeeded.")
+    print(f"- output directory: {tmp_dir}")
+    print(f"- output file     : {output_path.name} ({size / 1024:.1f} KB)")
+    print("No upload or deletion was performed (dry-run mode).")
+    return True
+
+
+def check_keypad_daemon_running():
+    """
+    Check whether the keypad daemon process appears to be running.
+    Returns a tuple of (running: bool, matched_lines: list[str]).
+    """
+    try:
+        result = subprocess.run(
+            ["ps", "aux"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        stdout = result.stdout or ""
+        lines = stdout.splitlines()
+        matched = []
+        for line in lines:
+            if "keypad_daemon.py" in line or "app/keypad_daemon.py" in line:
+                matched.append(line)
+        return (len(matched) > 0, matched)
+    except Exception as e:
+        print(f"Error while checking daemon status: {e}")
+        return (False, [])
+
+
+def run_health_check() -> bool:
+    """
+    Run a health check for:
+    - available scanners
+    - configured scanner connectivity
+    - cloud connectivity
+    - keypad daemon status
+    Returns True if all mandatory checks are OK, otherwise False.
+    """
+    print("=== Health Check ===")
+    print("")
+
+    # 1) List available scanners
+    scanners_ok = False
+    print("[Scanners]")
+    try:
+        scanners_text = get_scanner_list()
+        if scanners_text:
+            lines = [ln for ln in scanners_text.splitlines() if ln.strip()]
+            if lines:
+                for line in lines:
+                    print(f"- {line}")
+                scanners_ok = True
+            else:
+                print("Scanners: NG (no scanners detected)")
+        else:
+            print("Scanners: NG (no scanners detected)")
+    except Exception as e:
+        print(f"Scanners: NG (failed to run 'scanimage -L': {e})")
+    print("")
+
+    # 2) Configured scanner connectivity via ScannerManager
+    configured_ok = False
+    print("[Configured scanner]")
+    try:
+        scanner = ScannerManager.get_instance()
+        print(f"device_name: {scanner.device_name}")
+        available = scanner.check_scanner_available()
+        warm_up_ok = scanner.warm_up_scanner()
+        configured_ok = bool(available and warm_up_ok)
+        print(f"reachable: {str(configured_ok).lower()}")
+    except Exception as e:
+        print(f"reachable: false (error during scanner check: {e})")
+    print("")
+
+    # 3) Cloud connectivity
+    cloud_ok = True
+    print("[Cloud]")
+    provider = "<unknown>"
+    endpoint = "<unknown>"
+
+    try:
+        raw = _load_upload_config_raw()
+        provider = str(raw.get("provider", "nextcloud"))
+        if provider == "nextcloud":
+            cfg = load_nextcloud_config()
+            endpoint = cfg.get("endpoint", "<missing-endpoint>")
+            try:
+                try:
+                    from .nextcloud import test_nextcloud_connection
+                except ImportError:
+                    from lib.nextcloud import test_nextcloud_connection
+
+                reachable = bool(test_nextcloud_connection())
+            except Exception as e:
+                print(f"reachable: false (error during cloud check: {e})")
+                reachable = False
+            print(f"provider: {provider}")
+            print(f"endpoint: {endpoint}")
+            if reachable:
+                print("reachable: true")
+            else:
+                print("reachable: false")
+            cloud_ok = reachable
+        else:
+            endpoint_cfg = raw.get(provider, {})
+            if isinstance(endpoint_cfg, dict):
+                endpoint = str(endpoint_cfg.get("endpoint", "<unknown-endpoint>"))
+            print(f"provider: {provider}")
+            print(f"endpoint: {endpoint}")
+            print("reachable: N/A (provider not supported for health check)")
+            # Treat unsupported providers as neutral (do not fail overall health)
+            cloud_ok = True
+    except FileNotFoundError:
+        print("provider: <missing>")
+        print("endpoint: <missing>")
+        print("reachable: false (upload.json not found)")
+        cloud_ok = False
+    except Exception as e:
+        print(f"provider: {provider}")
+        print(f"endpoint: {endpoint}")
+        print(f"reachable: false (error while reading upload config: {e})")
+        cloud_ok = False
+    print("")
+
+    # 4) Keypad daemon status
+    print("[Daemon]")
+    daemon_running, daemon_lines = check_keypad_daemon_running()
+    print(f"running: {str(daemon_running).lower()}")
+    if daemon_lines:
+        # Show at most first two lines to avoid flooding output
+        for line in daemon_lines[:2]:
+            print(f"process: {line}")
+        if len(daemon_lines) > 2:
+            print(f"... ({len(daemon_lines) - 2} more processes)")
+    print("")
+
+    all_ok = bool(scanners_ok and configured_ok and cloud_ok and daemon_running)
+    print("[Summary]")
+    print(
+        f"scanners: {'OK' if scanners_ok else 'NG'} / "
+        f"configured: {'OK' if configured_ok else 'NG'} / "
+        f"cloud: {'OK' if cloud_ok else 'NG'} / "
+        f"daemon: {'OK' if daemon_running else 'NG'}"
+    )
+    return all_ok
+
+
+def main(argv=None):
     import argparse
+
+    if argv is None:
+        argv = sys.argv[1:]
 
     parser = argparse.ArgumentParser(description="Scan documents with scanimage and save the result")
     parser.add_argument("config", nargs='?', help="Configuration name in mode.json (e.g. receipt)")
     parser.add_argument("--output", help="Output file path for single-page scan (e.g. output.png)")
     parser.add_argument("--list", action="store_true", help="List available scanners")
     parser.add_argument("--no-upload", action="store_true", help="Skip uploading to cloud")
-    
-    args = parser.parse_args()
-    
+    parser.add_argument(
+        "--dump-config",
+        metavar="MODE",
+        help="Dump effective scan and upload configuration for the given mode",
+    )
+    parser.add_argument(
+        "--dry-run",
+        choices=["check", "scan"],
+        help="Run in dry-run mode: 'check' for environment check, 'scan' for single-page test scan",
+    )
+    parser.add_argument(
+        "--health",
+        action="store_true",
+        help="Run health check for scanner, cloud, and daemon",
+    )
+
+    args = parser.parse_args(argv)
+
     try:
+        if args.health:
+            # Health check cannot be combined with other operational flags.
+            if args.dry_run or args.dump_config or args.list or args.output or args.config:
+                print("Error: --health cannot be combined with other scan options.", file=sys.stderr)
+                return 1
+            ok = run_health_check()
+            return 0 if ok else 1
+
+        if args.dry_run:
+            # Dry-run cannot be combined with other operational flags.
+            if args.dump_config or args.list or args.output:
+                print("Error: --dry-run cannot be combined with --dump-config, --list, or --output.", file=sys.stderr)
+                return 1
+            if args.dry_run == "check":
+                if args.config:
+                    print("Error: --dry-run check must not be combined with a config name.", file=sys.stderr)
+                    return 1
+                ok = run_dry_run_check()
+                return 0 if ok else 1
+            if args.dry_run == "scan":
+                if not args.config:
+                    print("Error: --dry-run scan requires a config name.", file=sys.stderr)
+                    return 1
+                ok = run_dry_run_single_scan(args.config)
+                return 0 if ok else 1
+
+        if args.dump_config:
+            if args.config or args.output:
+                print("Error: --dump-config cannot be combined with other scan options.", file=sys.stderr)
+                return 1
+            try:
+                text = dump_config(args.dump_config)
+            except ValueError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
+            print(text)
+            return 0
         if args.list:
             # List scanners
             scanners = get_scanner_list()
             print(f"Available scanners:\n{scanners}")
-            sys.exit(0)
-        elif args.output and args.config:
+            return 0
+        if args.output and args.config:
             # Single-page mode
             success = single_scan_with_scanimage(args.output, args.config, not args.no_upload)
-            sys.exit(0 if success else 1)
-        elif args.config:
+            return 0 if success else 1
+        if args.config:
             # Batch scan mode
             result = batch_scan_with_scanimage(args.config, not args.no_upload)
-            sys.exit(0 if result else 1)
-        else:
-            parser.print_help()
-            sys.exit(0)
+            return 0 if result else 1
+
+        parser.print_help()
+        return 0
     except Exception as e:
         print(f"Unexpected error: {e}")
-        sys.exit(1)
+        return 1
+
+
+if __name__ == "__main__":  # pragma: no cover
+    sys.exit(main())

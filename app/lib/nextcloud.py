@@ -33,6 +33,77 @@ def load_nextcloud_config(config_path: str = str(Path(__file__).resolve().parent
     return nc_cfg
 
 
+def test_nextcloud_connection() -> bool:
+    """
+    Lightweight connectivity test to the configured Nextcloud endpoint.
+    This does not upload or modify any remote resources; it only issues
+    a simple HTTP request (HEAD) and inspects the HTTP status line.
+    """
+    try:
+        config = load_nextcloud_config()
+
+        endpoint = config.get("endpoint")
+        if not endpoint:
+            print("Nextcloud endpoint is not configured.")
+            return False
+
+        # Use HEAD (-I) to avoid downloading content.
+        curl_cmd = (
+            f"curl -i -I "
+            f"-u '{config['username']}:{config['password']}' "
+            f"-k '{endpoint}'"
+        )
+        safe_cmd = curl_cmd.replace(
+            f"{config['username']}:{config['password']}",
+            "USERNAME:PASSWORD",
+        )
+        print(f"Testing Nextcloud connectivity with command: {safe_cmd}")
+
+        result = subprocess.run(
+            curl_cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+        )
+
+        print("\n===== Nextcloud connectivity check output =====")
+        print("stdout:")
+        print(result.stdout)
+        print("\nstderr:")
+        print(result.stderr)
+        print("===== end of output =====\n")
+
+        # Extract first HTTP status line from stdout
+        response_lines = result.stdout.strip().split("\n")
+        status_line = next((line for line in response_lines if line.startswith("HTTP/")), None)
+
+        if not status_line:
+            print("Could not find HTTP status line for connectivity check")
+            return False
+
+        print(f"Connectivity response: {status_line}")
+        parts = status_line.split()
+        if len(parts) < 2:
+            print(f"Invalid HTTP status line: {status_line}")
+            return False
+
+        try:
+            status_code = int(parts[1])
+        except ValueError:
+            print(f"Failed to parse HTTP status code: {status_line}")
+            return False
+
+        if 200 <= status_code < 400:
+            print(f"Nextcloud connectivity OK (status={status_code})")
+            return True
+
+        print(f"Nextcloud connectivity NG (status={status_code})")
+        return False
+    except Exception as e:
+        print(f"Error while testing Nextcloud connectivity: {e}")
+        return False
+
+
 def create_remote_directory(remote_dir: str) -> bool:
     """
     Create a directory on Nextcloud (treat already-exists as success).

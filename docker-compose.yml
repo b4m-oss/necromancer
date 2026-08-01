@@ -1,0 +1,11 @@
+# Local development / unit tests (Python 3.11). Not a Pi runtime image.
+services:
+  dev:
+    build: .
+    image: b4m-necromancer-dev:3.11
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    # Reinstall editable package after bind-mount so app/ matches the host tree.
+    command: >
+      sh -c "pip install -q -e '.[dev]' && pytest -q"

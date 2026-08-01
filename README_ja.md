@@ -69,6 +69,93 @@ chmod +x install.sh
 
 数字キーを押してから5秒以内にEnterを押さない場合、入力はクリアされます。また、別の数字キーを押すと入力は上書きされます。
 
+### コンフィグダンプ (`--dump-config`)
+
+本番スキャンの前に、**「最終的にどのコマンド・どのクラウドパスで動くか」** を確認したい場合は、`--dump-config` オプションを使います。
+
+- 読み込まれる設定:
+  - `app/config/scanner.json`
+  - `app/config/mode.json`
+  - `app/config/upload.json`
+- ダンプ内容:
+  - 実際に `scanimage` に渡されるバッチスキャン用コマンドライン
+  - スキャン結果のアップロード先情報（プロバイダ／エンドポイント／アップロードフォルダ／リモートパスのパターン など）
+
+#### 使い方
+
+開発環境から直接実行する場合:
+
+```bash
+python3 -m app.lib.scan --dump-config diary
+```
+
+インストール済みの環境では、`install.sh` により `necro` エイリアスがシェルに追加されるため、次のようにも実行できます（新しいシェルを開くか、`source ~/.bashrc` / `source ~/.zshrc` を実行してから利用してください）。
+
+```bash
+necro --dump-config diary
+```
+
+#### 出力イメージ（抜粋）
+
+```text
+Mode: diary
+
+=== scanimage command (batch) ===
+scanimage --device="fujitsu:ScanSnap iX500:17872" --resolution=200 ...
+
+Parameters:
+- device_name: fujitsu:ScanSnap iX500:17872
+- resolution: 200
+- mode: Color
+- source: ADF Duplex
+- format: jpeg
+- output_pattern: /.../tmp/{timestamp}/diary-%d.jpg
+- extra_options: ['--swdeskew=yes', '--page-width=210', '--page-height=305']
+
+=== upload target ===
+provider          : nextcloud
+endpoint          : https://example.com/remote.php/dav/files/user/
+upload_folder     : Scans/
+strategy          : pdf
+remote_path       : Scans/diary-{timestamp}.pdf
+delete_after_upload: False
+```
+
+- 実際の `{timestamp}` には実行時のタイムスタンプが入ります。
+- **注意:** `--dump-config` は設定を計算して表示するだけで、スキャンやアップロードは行いません（ドライに確認できます）。
+
+## ローカル開発（ホスト / Docker）
+
+依存関係はルートの `pyproject.toml` に定義しています（`requires-python >=3.11`）。  
+Raspberry Pi 向けインストールは従来どおり `app/install.sh` が `app/requirements.txt` を使います（ランタイムのピンは `pyproject.toml` と同期）。
+
+### ホスト（Python 3.11）
+
+```bash
+make install-dev   # .venv を作成し pip install -e ".[dev]"
+make test
+make test-cov
+```
+
+macOS では `evdev` はスキップされます（Linux 向けマーカー）。テストは既存の fake/mock を使います。
+
+### Docker（Python 3.11 固定）
+
+```bash
+make docker-build
+make docker-test
+```
+
+Compose / `docker run` の例:
+
+```bash
+docker compose build
+docker compose run --rm dev
+docker run --rm -v "$PWD":/workspace -w /workspace b4m-necromancer-dev:3.11   sh -c "pip install -q -e '.[dev]' && pytest -q"
+```
+
+詳細は [開発者ガイド](./docs/dev/_developers_guide.md) を参照してください。
+
 ## サポート
 
 **おことわり**

@@ -1,11 +1,22 @@
 import json
+import sys
 from pathlib import Path
 
-from .nextcloud import (
-    upload_directory_to_nextcloud,
-    upload_pdf_to_nextcloud,
-    upload_file_to_nextcloud,
-)
+try:
+    from .nextcloud import (
+        upload_directory_to_nextcloud,
+        upload_pdf_to_nextcloud,
+        upload_file_to_nextcloud,
+    )
+except ImportError:
+    _app_root = Path(__file__).resolve().parent.parent
+    if str(_app_root) not in sys.path:
+        sys.path.insert(0, str(_app_root))
+    from lib.nextcloud import (
+        upload_directory_to_nextcloud,
+        upload_pdf_to_nextcloud,
+        upload_file_to_nextcloud,
+    )
 
 
 class NextcloudUploader:

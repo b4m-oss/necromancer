@@ -1,0 +1,16 @@
+[run]
+branch = True
+source =
+    app/lib
+omit =
+    */tests/*
+    */__pycache__/*
+
+[report]
+precision = 1
+show_missing = True
+skip_empty = True
+
+[html]
+directory = htmlcov
+
