@@ -95,8 +95,18 @@ sudo systemctl daemon-reload
 sudo systemctl enable scanner_service.service
 
 echo "Installation finished!"
-echo "To start the service: sudo systemctl start scanner_service.service"
-echo "To check status:      sudo systemctl status scanner_service.service"
+echo ""
+echo "Next steps:"
+echo "  1. Copy upload settings (keep secrets out of git):"
+echo "       cp ${APP_DST_DIR}/config/upload.example.json ${APP_DST_DIR}/config/upload.json"
+echo "     Then edit upload.json with your credentials."
+echo "  2. Review scanner/mode settings under ${APP_DST_DIR}/config/"
+echo "  3. Start the service:"
+echo "       sudo systemctl start scanner_service.service"
+echo "     Check status:"
+echo "       sudo systemctl status scanner_service.service"
+echo "  4. Optional dry-run (open a new shell, or source ~/.bashrc / ~/.zshrc first):"
+echo "       necro --dry-run check"
 echo ""
 echo "Start the service now? [y/N]"
 read -r start_service
