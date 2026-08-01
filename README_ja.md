@@ -39,17 +39,32 @@
 
 ### 自動インストール
 
-以下では、リポジトリを `~/b4m-necromancer` にクローンする前提で説明します。
+Raspberry Pi 上でリポジトリをクローンし、ルートのインストーラを実行します（内部で `app/install.sh` に委譲します）。
 
-1. Raspberry Pi 上でリポジトリをクローンします
-2. `app` ディレクトリに移動してインストールスクリプトを実行します
+**推奨**（リリースタグ `v0.3.0` 公開後）:
 
 ```bash
-git clone https://github.com/b4m-oss/b4m-necromancer.git ~/b4m-necromancer
-cd ~/b4m-necromancer/app
-chmod +x install.sh
-./install.sh
+git clone --branch v0.3.0 https://github.com/b4m-oss/necromancer.git ~/necromancer
+cd ~/necromancer && ./install.sh
 ```
+
+タグがまだ無い場合は、開発ブランチを使ってください:
+
+```bash
+git clone --branch dev-v0.3.0 https://github.com/b4m-oss/necromancer.git ~/necromancer
+# または: --branch main
+cd ~/necromancer && ./install.sh
+```
+
+リポジトリルートから `make install-pi` でも同じ処理になります（`./install.sh` 相当）。
+
+**任意**（クローン済みリポジトリのルートから。タグ付きスクリプトを優先）:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/b4m-oss/necromancer/v0.3.0/install.sh | bash
+```
+
+インストール後は `~/app/config/upload.example.json` を `~/app/config/upload.json` にコピーして認証情報を編集してください（秘密情報はコミットしないでください）。詳細は [セットアップと設定](./docs/ja/setup_config.md) を参照。
 
 ### 手動インストール
 

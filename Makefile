@@ -5,11 +5,12 @@ VENV_BIN := $(VENV)/bin
 PYTEST := $(VENV_BIN)/pytest
 DOCKER_COMPOSE ?= docker compose
 
-.PHONY: help venv install-dev test test-cov coverage-html docker-build docker-test clean
+.PHONY: help venv install-dev install-pi test test-cov coverage-html docker-build docker-test clean
 
 help:
 	@echo "Targets:"
 	@echo "  make install-dev    Create .venv and pip install -e \".[dev]\""
+	@echo "  make install-pi     Run ./install.sh (Raspberry Pi deploy via app/install.sh)"
 	@echo "  make test           Run pytest on host"
 	@echo "  make test-cov       Run pytest with coverage (app/lib, terminal report)"
 	@echo "  make coverage-html  Same as test-cov, plus htmlcov/ report"
@@ -34,6 +35,9 @@ venv:
 
 install-dev: venv
 	$(VENV_BIN)/pip install -e ".[dev]"
+
+install-pi:
+	./install.sh
 
 test: $(PYTEST)
 	$(PYTEST) -q
