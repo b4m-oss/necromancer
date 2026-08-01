@@ -29,7 +29,7 @@ cp -r "${APP_SRC_DIR}/"* "$APP_DST_DIR/"
 
 # Pi deploy copies only app/ → $HOME/app. Runtime pins live in requirements.txt
 # (kept in sync with repo-root pyproject.toml). Full-repo editable install is for
-# host/Docker development only (see Makefile / Dockerfile).
+# host/Docker development only (see Makefile / docker/Dockerfile).
 REQ_FILE="${APP_DST_DIR}/requirements.txt"
 if [ ! -f "$REQ_FILE" ]; then
     echo "ERROR: requirements.txt not found at ${REQ_FILE}"
