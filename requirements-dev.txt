@@ -1,0 +1,5 @@
+# Host / CI development dependencies (unit tests + coverage).
+# Runtime deps for Pi remain in app/requirements.txt (evdev is Linux-oriented).
+Pillow>=10.0.0,<12
+pytest>=8.0.0,<9
+pytest-cov>=5.0.0,<7

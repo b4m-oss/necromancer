@@ -13,6 +13,14 @@
 *.pyo
 *.pyd
 
+# Coverage / pytest
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+coverage.xml
+
+
 # Virtual environments (patterns for safety)
 venv/
 .venv/
