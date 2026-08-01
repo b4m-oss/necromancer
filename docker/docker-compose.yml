@@ -1,11 +1,14 @@
 # Local development / unit tests (Python 3.11). Not a Pi runtime image.
+# Run from repo root: docker compose -f docker/docker-compose.yml …
 services:
   dev:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     image: b4m-necromancer-dev:3.11
     working_dir: /workspace
     volumes:
-      - .:/workspace
+      - ..:/workspace
     # Reinstall editable package after bind-mount so app/ matches the host tree.
     command: >
       sh -c "pip install -q -e '.[dev]' && pytest -q"
